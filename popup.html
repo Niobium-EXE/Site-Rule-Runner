@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Site Rule Runner</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="popup-shell">
+    <header class="topbar">
+      <div>
+        <h1>Site Rule Runner</h1>
+        <p>Hide page elements or run your own JavaScript by site.</p>
+      </div>
+    </header>
+
+    <nav class="tabs" aria-label="Rule type">
+      <button class="tab active" data-tab="css" type="button">CSS Hide</button>
+      <button class="tab" data-tab="js" type="button">JavaScript</button>
+    </nav>
+
+    <section id="css-panel" class="panel active">
+      <form id="css-form" class="rule-form">
+        <label>
+          <span>Website</span>
+          <input id="css-site" type="text" placeholder="example.com" autocomplete="off" required>
+          <small>Domain, URL, or Chromium match pattern.</small>
+        </label>
+        <label>
+          <span>CSS class or selector</span>
+          <input id="css-selector" type="text" placeholder="sponsored-card or .sponsored-card" autocomplete="off" required>
+          <small>Bare names are treated as classes. Full CSS selectors also work.</small>
+        </label>
+        <button class="primary" type="submit">Add hide rule</button>
+      </form>
+
+      <div class="section-heading">
+        <h2>Hide rules</h2>
+        <span id="css-count" class="count">0</span>
+      </div>
+      <div id="css-rules" class="rule-list"></div>
+      <p id="css-empty" class="empty">No CSS hide rules yet.</p>
+    </section>
+
+    <section id="js-panel" class="panel">
+      <div id="js-warning" class="warning hidden">
+        <strong>JavaScript permission is not enabled.</strong>
+        <span>Open the extension's Details page and enable <b>Allow User Scripts</b>. On older Chromium builds, Developer mode may be required.</span>
+      </div>
+
+      <form id="js-form" class="rule-form">
+        <label>
+          <span>Website</span>
+          <input id="js-site" type="text" placeholder="example.com" autocomplete="off" required>
+          <small>Domain, URL, or Chromium match pattern.</small>
+        </label>
+        <label>
+          <span>JavaScript</span>
+          <textarea id="js-code" rows="6" placeholder="document.querySelector('.thing')?.remove();" spellcheck="false" required></textarea>
+          <small>Runs at document idle in the page's main JavaScript world.</small>
+        </label>
+        <button class="primary" type="submit">Add JavaScript rule</button>
+      </form>
+
+      <div class="section-heading">
+        <h2>JavaScript rules</h2>
+        <span id="js-count" class="count">0</span>
+      </div>
+      <div id="js-rules" class="rule-list"></div>
+      <p id="js-empty" class="empty">No JavaScript rules yet.</p>
+    </section>
+
+    <footer class="footer-actions">
+      <button id="import-button" class="secondary" type="button">Import config</button>
+      <button id="export-button" class="secondary" type="button">Export config</button>
+      <input id="import-file" type="file" accept="application/json,.json" hidden>
+    </footer>
+
+    <div id="toast" class="toast" aria-live="polite"></div>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
