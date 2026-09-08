@@ -7,6 +7,21 @@ const DEFAULT_CONFIG = {
   jsRules: []
 };
 
+const ACTION_ICONS = {
+  active: {
+    16: "icons/active-16.png",
+    32: "icons/active-32.png",
+    48: "icons/active-48.png",
+    128: "icons/active-128.png"
+  },
+  inactive: {
+    16: "icons/inactive-16.png",
+    32: "icons/inactive-32.png",
+    48: "icons/inactive-48.png",
+    128: "icons/inactive-128.png"
+  }
+};
+
 function normalizeConfig(config) {
   const value = config && typeof config === "object" ? config : {};
   return {
@@ -48,6 +63,95 @@ function normalizeSiteToMatchPattern(site) {
   return `*://${wildcardHost}${path}`;
 }
 
+function wildcardToRegex(text) {
+  return text.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+}
+
+function matchesPattern(urlString, pattern) {
+  try {
+    if (!pattern) return false;
+    if (pattern === "<all_urls>") return /^(https?|file|ftp):/i.test(urlString);
+
+    const match = pattern.match(/^(\*|http|https|file|ftp):\/\/([^/]+)(\/.*)$/i);
+    if (!match) return false;
+
+    const [, schemePattern, hostPattern, pathPattern] = match;
+    const url = new URL(urlString);
+
+    if (schemePattern === "*") {
+      if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+    } else if (`${schemePattern.toLowerCase()}:` !== url.protocol.toLowerCase()) {
+      return false;
+    }
+
+    const host = url.hostname;
+    let hostMatches = false;
+    if (hostPattern === "*") {
+      hostMatches = true;
+    } else if (hostPattern.startsWith("*.")) {
+      const base = hostPattern.slice(2).toLowerCase();
+      const actual = host.toLowerCase();
+      hostMatches = actual === base || actual.endsWith(`.${base}`);
+    } else {
+      hostMatches = host.toLowerCase() === hostPattern.toLowerCase();
+    }
+    if (!hostMatches) return false;
+
+    const pathAndQuery = url.pathname + url.search + url.hash;
+    return new RegExp(`^${wildcardToRegex(pathPattern)}$`).test(pathAndQuery);
+  } catch {
+    return false;
+  }
+}
+
+function ruleMatchesUrl(rule, url) {
+  if (!rule || rule.enabled === false || !rule.site) return false;
+  try {
+    return matchesPattern(url, normalizeSiteToMatchPattern(rule.site));
+  } catch {
+    return false;
+  }
+}
+
+function configHasRuleForUrl(config, url) {
+  if (!url) return false;
+  return [...config.cssRules, ...config.jsRules].some(rule => ruleMatchesUrl(rule, url));
+}
+
+async function getConfig() {
+  const stored = await chrome.storage.local.get(STORAGE_KEY);
+  return normalizeConfig(stored[STORAGE_KEY] || DEFAULT_CONFIG);
+}
+
+async function setIconForTab(tabId, url, config = null) {
+  if (!Number.isInteger(tabId)) return;
+  const currentConfig = config || await getConfig();
+  const active = configHasRuleForUrl(currentConfig, url || "");
+
+  try {
+    await chrome.action.setIcon({
+      tabId,
+      path: active ? ACTION_ICONS.active : ACTION_ICONS.inactive
+    });
+    await chrome.action.setTitle({
+      tabId,
+      title: active
+        ? "Site Rule Runner — rules active on this site"
+        : "Site Rule Runner — no active rules on this site"
+    });
+  } catch {
+    // Some internal browser pages do not allow per-tab action updates.
+  }
+}
+
+async function updateAllTabIcons(config = null) {
+  const currentConfig = config || await getConfig();
+  const tabs = await chrome.tabs.query({});
+  await Promise.allSettled(
+    tabs.map(tab => setIconForTab(tab.id, tab.url || tab.pendingUrl || "", currentConfig))
+  );
+}
+
 function makeRegisteredScript(rule) {
   const code = String(rule.code || "");
   const wrappedCode = `(() => {\n  try {\n${code}\n  } catch (error) {\n    console.error('[Site Rule Runner]', error);\n  }\n})();`;
@@ -74,9 +178,7 @@ async function userScriptsAvailable() {
 async function syncUserScripts() {
   if (!(await userScriptsAvailable())) return;
 
-  const stored = await chrome.storage.local.get(STORAGE_KEY);
-  const config = normalizeConfig(stored[STORAGE_KEY] || DEFAULT_CONFIG);
-
+  const config = await getConfig();
   const existing = await chrome.userScripts.getScripts();
   const ours = existing.filter(script => script.id.startsWith(SCRIPT_PREFIX));
   if (ours.length) {
@@ -105,15 +207,34 @@ chrome.runtime.onInstalled.addListener(async () => {
     await chrome.storage.local.set({ [STORAGE_KEY]: DEFAULT_CONFIG });
   }
   await syncUserScripts();
+  await updateAllTabIcons();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   syncUserScripts().catch(console.error);
+  updateAllTabIcons().catch(console.error);
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === "local" && changes[STORAGE_KEY]) {
+    const config = normalizeConfig(changes[STORAGE_KEY].newValue || DEFAULT_CONFIG);
     syncUserScripts().catch(console.error);
+    updateAllTabIcons(config).catch(console.error);
+  }
+});
+
+chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    await setIconForTab(tabId, tab.url || tab.pendingUrl || "");
+  } catch {
+    // Tab may have closed before it could be read.
+  }
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.url || changeInfo.status === "loading" || changeInfo.status === "complete") {
+    setIconForTab(tabId, changeInfo.url || tab.url || tab.pendingUrl || "").catch(console.error);
   }
 });
 
@@ -127,6 +248,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === "SRR_SYNC_JS") {
     syncUserScripts()
+      .then(() => sendResponse({ ok: true }))
+      .catch(error => sendResponse({ ok: false, error: String(error?.message || error) }));
+    return true;
+  }
+
+  if (message?.type === "SRR_PAGE_URL" && sender.tab?.id != null) {
+    setIconForTab(sender.tab.id, String(message.url || sender.tab.url || ""))
       .then(() => sendResponse({ ok: true }))
       .catch(error => sendResponse({ ok: false, error: String(error?.message || error) }));
     return true;

@@ -1,4 +1,4 @@
-# Site Rule Runner 1.0.0
+# Site Rule Runner 1.1.0
 
 A Chromium Manifest V3 extension that can:
 
@@ -64,3 +64,12 @@ The extension requires Chromium/Chrome 120 or newer for the User Scripts API.
   ]
 }
 ```
+
+## Version 1.1.0 icon states
+
+The toolbar icon now changes per tab:
+
+- **Active icon (check/sparkle):** the current page matches at least one enabled CSS or JavaScript rule.
+- **Inactive icon (pause):** the current page has no enabled matching rules.
+
+The state updates when you switch tabs, navigate, use many single-page-app URL changes, or edit/import rules.

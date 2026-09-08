@@ -70,7 +70,12 @@ function normalizeSelector(input) {
   return selector;
 }
 
+function notifyCurrentUrl() {
+  chrome.runtime.sendMessage({ type: "SRR_PAGE_URL", url: location.href }).catch(() => {});
+}
+
 async function applyCssRules() {
+  notifyCurrentUrl();
   const stored = await chrome.storage.local.get(STORAGE_KEY);
   const config = stored[STORAGE_KEY] || {};
   const rules = Array.isArray(config.cssRules) ? config.cssRules : [];
