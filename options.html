@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Site Rule Runner Options</title>
+  <link rel="stylesheet" href="ui.css">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <img src="icons/active-48.png" alt="">
+        <div><strong>Site Rule Runner</strong><span>Options</span></div>
+      </div>
+      <nav>
+        <button class="nav active" data-section="css">CSS Hide Rules <span id="cssCount">0</span></button>
+        <button class="nav" data-section="js">JavaScript Rules <span id="jsCount">0</span></button>
+        <button class="nav" data-section="data">Import & Export</button>
+      </nav>
+      <div class="sidebar-foot">Version 1.2.0</div>
+    </aside>
+
+    <main class="content">
+      <section id="section-css" class="section">
+        <div class="section-head">
+          <div><h1>CSS Hide Rules</h1><p>Hide elements on matching websites using a class name or any CSS selector.</p></div>
+          <button id="newCss" class="btn primary">New CSS rule</button>
+        </div>
+        <div class="toolbar"><input id="cssSearch" type="search" placeholder="Search websites or selectors"></div>
+        <div id="allCssRules" class="editor-list"></div>
+      </section>
+
+      <section id="section-js" class="section hidden">
+        <div class="section-head">
+          <div><h1>JavaScript Rules</h1><p>Run custom JavaScript on matching page loads.</p></div>
+          <button id="newJs" class="btn primary">New JavaScript rule</button>
+        </div>
+        <div id="jsRuntimeStatus" class="runtime-card"></div>
+        <div class="toolbar"><input id="jsSearch" type="search" placeholder="Search websites or JavaScript"></div>
+        <div id="allJsRules" class="editor-list"></div>
+      </section>
+
+      <section id="section-data" class="section hidden">
+        <div class="section-head"><div><h1>Import & Export</h1><p>Back up all CSS and JavaScript rules or move them to another browser.</p></div></div>
+        <div class="data-grid">
+          <article class="panel"><h2>Export configuration</h2><p>Downloads one JSON file containing every rule and its enabled state.</p><button id="optionsExport" class="btn primary">Export config</button></article>
+          <article class="panel"><h2>Import configuration</h2><p>Importing replaces the rules currently stored in this extension.</p><button id="optionsImport" class="btn">Choose config file</button><input id="optionsFile" type="file" accept="application/json,.json" hidden></article>
+          <article class="panel danger-zone"><h2>Delete all rules</h2><p>Clears all saved CSS and JavaScript rules from this browser.</p><button id="deleteAll" class="btn danger">Delete all rules</button></article>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="ruleDialog">
+    <form method="dialog" id="ruleForm" class="dialog-card">
+      <div class="dialog-head"><div><h2 id="dialogTitle">Edit rule</h2><p id="dialogHelp"></p></div><button id="closeDialog" type="button" class="btn icon-btn" aria-label="Close">×</button></div>
+      <input id="editType" type="hidden"><input id="editId" type="hidden">
+      <div><label for="editPattern">Website</label><input id="editPattern" required placeholder="example.com or *://*.example.com/*"><div class="hint">Examples: example.com, example.com/account/*, https://example.com/*, *://*.example.com/*, &lt;all_urls&gt;</div></div>
+      <div id="selectorField"><label for="editSelector">CSS class or selector</label><input id="editSelector" placeholder="ad-banner or .sidebar .promo"><div class="hint">A simple class name is automatically converted to .class-name.</div></div>
+      <div id="codeField"><label for="editCode">JavaScript</label><textarea id="editCode" rows="12" placeholder="// JavaScript to run on matching pages"></textarea></div>
+      <label class="enabled-row"><input id="editEnabled" type="checkbox"> Enabled</label>
+      <div class="dialog-actions"><button id="cancelDialog" type="button" class="btn">Cancel</button><button id="saveRule" type="submit" class="btn primary">Save rule</button></div>
+    </form>
+  </dialog>
+
+  <script src="shared.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

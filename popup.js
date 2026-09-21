@@ -1,188 +1,129 @@
-const STORAGE_KEY = "siteRuleRunnerConfig";
-const DEFAULT_CONFIG = { version: 1, cssRules: [], jsRules: [] };
+const $ = id => document.getElementById(id);
+let config = { cssRules: [], jsRules: [] };
+let currentUrl = "";
 
-let config = structuredClone(DEFAULT_CONFIG);
-let toastTimer;
-
-const $ = selector => document.querySelector(selector);
-const cssRulesEl = $("#css-rules");
-const jsRulesEl = $("#js-rules");
-
-function uid() {
-  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function cleanConfig(input) {
-  if (!input || typeof input !== "object") throw new Error("Config must be a JSON object.");
-  const cssRules = Array.isArray(input.cssRules) ? input.cssRules : [];
-  const jsRules = Array.isArray(input.jsRules) ? input.jsRules : [];
-
-  return {
-    version: 1,
-    cssRules: cssRules.map(rule => ({
-      id: String(rule.id || uid()),
-      site: String(rule.site || "").trim(),
-      selector: String(rule.selector || "").trim(),
-      enabled: rule.enabled !== false
-    })).filter(rule => rule.site && rule.selector),
-    jsRules: jsRules.map(rule => ({
-      id: String(rule.id || uid()),
-      site: String(rule.site || "").trim(),
-      code: String(rule.code || ""),
-      enabled: rule.enabled !== false
-    })).filter(rule => rule.site && rule.code.trim())
-  };
-}
-
-async function load() {
-  const stored = await chrome.storage.local.get(STORAGE_KEY);
-  config = cleanConfig(stored[STORAGE_KEY] || DEFAULT_CONFIG);
+async function init() {
+  config = await SiteRuleUtils.loadConfig();
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  currentUrl = tab?.url || "";
+  if (currentUrl) {
+    try {
+      const u = new URL(currentUrl);
+      $("currentSite").textContent = u.hostname || currentUrl;
+      $("cssWebsite").value = u.hostname;
+      $("jsWebsite").value = u.hostname;
+    } catch { $("currentSite").textContent = currentUrl; }
+  }
+  bind();
   render();
-  checkJsStatus();
+  renderJsStatus();
 }
 
-async function save(message = "Saved") {
-  await chrome.storage.local.set({ [STORAGE_KEY]: config });
-  render();
-  showToast(message);
-}
-
-function showToast(message) {
-  const toast = $("#toast");
-  toast.textContent = message;
-  toast.classList.add("show");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove("show"), 1600);
-}
-
-function makeRuleCard(rule, type) {
-  const card = document.createElement("div");
-  card.className = "rule-card" + (rule.enabled === false ? " disabled" : "");
-
-  const top = document.createElement("div");
-  top.className = "rule-top";
-
-  const main = document.createElement("div");
-  main.className = "rule-main";
-
-  const site = document.createElement("div");
-  site.className = "rule-site";
-  site.textContent = rule.site;
-
-  const value = document.createElement("div");
-  value.className = "rule-value" + (type === "js" ? " code" : "");
-  value.textContent = type === "css" ? rule.selector : rule.code;
-
-  main.append(site, value);
-
-  const actions = document.createElement("div");
-  actions.className = "rule-actions";
-
-  const toggle = document.createElement("input");
-  toggle.type = "checkbox";
-  toggle.className = "toggle";
-  toggle.checked = rule.enabled !== false;
-  toggle.title = toggle.checked ? "Disable rule" : "Enable rule";
-  toggle.addEventListener("change", async () => {
-    rule.enabled = toggle.checked;
-    await save(rule.enabled ? "Rule enabled" : "Rule disabled");
+function bind() {
+  document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b === btn));
+    $("cssTab").classList.toggle("hidden", btn.dataset.tab !== "css");
+    $("jsTab").classList.toggle("hidden", btn.dataset.tab !== "js");
+  }));
+  $("openOptions").addEventListener("click", () => chrome.runtime.openOptionsPage());
+  $("addCss").addEventListener("click", addCss);
+  $("addJs").addEventListener("click", addJs);
+  $("exportConfig").addEventListener("click", exportConfig);
+  $("importConfig").addEventListener("click", () => $("fileInput").click());
+  $("fileInput").addEventListener("change", importConfig);
+  chrome.storage.onChanged.addListener(async (changes, area) => {
+    if (area === "local" && (changes.cssRules || changes.jsRules)) {
+      config = await SiteRuleUtils.loadConfig();
+      render();
+    }
+    if (area === "local" && changes.jsRuntimeStatus) renderJsStatus();
   });
+}
 
-  const remove = document.createElement("button");
-  remove.type = "button";
-  remove.className = "danger-button";
-  remove.textContent = "Delete";
-  remove.addEventListener("click", async () => {
-    const collection = type === "css" ? config.cssRules : config.jsRules;
-    const index = collection.findIndex(item => item.id === rule.id);
-    if (index !== -1) collection.splice(index, 1);
-    await save("Rule deleted");
-  });
+async function addCss() {
+  const pattern = $("cssWebsite").value.trim();
+  const selector = SiteRuleUtils.normalizeSelector($("cssSelector").value);
+  if (!pattern || !selector) return;
+  config.cssRules.push({ id: SiteRuleUtils.makeId("css"), pattern, selector, enabled: true });
+  await SiteRuleUtils.saveConfig(config);
+  $("cssSelector").value = "";
+}
 
-  actions.append(toggle, remove);
-  top.append(main, actions);
-  card.append(top);
-  return card;
+async function addJs() {
+  const pattern = $("jsWebsite").value.trim();
+  const code = $("jsCode").value;
+  if (!pattern || !code.trim()) return;
+  config.jsRules.push({ id: SiteRuleUtils.makeId("js"), pattern, code, enabled: true });
+  await SiteRuleUtils.saveConfig(config);
+  $("jsCode").value = "";
+}
+
+function rulesForCurrent(list) {
+  return list.filter(r => SiteRuleUtils.patternMatchesUrl(r.pattern, currentUrl));
 }
 
 function render() {
-  cssRulesEl.replaceChildren(...config.cssRules.map(rule => makeRuleCard(rule, "css")));
-  jsRulesEl.replaceChildren(...config.jsRules.map(rule => makeRuleCard(rule, "js")));
-  $("#css-count").textContent = config.cssRules.length;
-  $("#js-count").textContent = config.jsRules.length;
-  $("#css-empty").classList.toggle("hidden", config.cssRules.length > 0);
-  $("#js-empty").classList.toggle("hidden", config.jsRules.length > 0);
+  renderRules("cssRules", rulesForCurrent(config.cssRules), "css");
+  renderRules("jsRules", rulesForCurrent(config.jsRules), "js");
 }
 
-async function checkJsStatus() {
-  try {
-    const response = await chrome.runtime.sendMessage({ type: "SRR_GET_JS_STATUS" });
-    $("#js-warning").classList.toggle("hidden", Boolean(response?.available));
-  } catch {
-    $("#js-warning").classList.remove("hidden");
+function renderRules(containerId, rules, type) {
+  const root = $(containerId);
+  root.replaceChildren();
+  if (!rules.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "No rules for the current site.";
+    root.append(empty);
+    return;
+  }
+  for (const rule of rules) {
+    const card = document.createElement("div");
+    card.className = `rule-card${rule.enabled ? "" : " off"}`;
+    const head = document.createElement("div"); head.className = "rule-head";
+    const titleWrap = document.createElement("div"); titleWrap.style.minWidth = "0";
+    const title = document.createElement("div"); title.className = "rule-title"; title.textContent = type === "css" ? rule.selector : "JavaScript rule";
+    const sub = document.createElement("div"); sub.className = "rule-sub"; sub.textContent = rule.pattern;
+    titleWrap.append(title, sub);
+    const actions = document.createElement("div"); actions.className = "actions";
+    const toggle = document.createElement("label"); toggle.className = "toggle";
+    const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = rule.enabled;
+    cb.addEventListener("change", async () => { rule.enabled = cb.checked; await SiteRuleUtils.saveConfig(config); });
+    const slider = document.createElement("span"); slider.className = "slider"; toggle.append(cb, slider);
+    const del = document.createElement("button"); del.className = "btn small danger"; del.textContent = "Delete";
+    del.addEventListener("click", async () => {
+      const list = type === "css" ? config.cssRules : config.jsRules;
+      const i = list.findIndex(r => r.id === rule.id); if (i >= 0) list.splice(i, 1);
+      await SiteRuleUtils.saveConfig(config);
+    });
+    actions.append(toggle, del); head.append(titleWrap, actions); card.append(head); root.append(card);
   }
 }
 
-document.querySelectorAll(".tab").forEach(tab => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach(item => item.classList.toggle("active", item === tab));
-    $("#css-panel").classList.toggle("active", tab.dataset.tab === "css");
-    $("#js-panel").classList.toggle("active", tab.dataset.tab === "js");
-    if (tab.dataset.tab === "js") checkJsStatus();
-  });
-});
+async function renderJsStatus() {
+  const { jsRuntimeStatus } = await chrome.storage.local.get("jsRuntimeStatus");
+  const el = $("jsStatus");
+  if (!jsRuntimeStatus) { el.textContent = ""; el.className = "status"; return; }
+  el.textContent = jsRuntimeStatus.message || "";
+  el.className = `status ${jsRuntimeStatus.ok ? "good" : "bad"}`;
+}
 
-$("#css-form").addEventListener("submit", async event => {
-  event.preventDefault();
-  const site = $("#css-site").value.trim();
-  const selector = $("#css-selector").value.trim();
-  if (!site || !selector) return;
-
-  config.cssRules.push({ id: uid(), site, selector, enabled: true });
-  $("#css-selector").value = "";
-  await save("Hide rule added");
-});
-
-$("#js-form").addEventListener("submit", async event => {
-  event.preventDefault();
-  const site = $("#js-site").value.trim();
-  const code = $("#js-code").value;
-  if (!site || !code.trim()) return;
-
-  config.jsRules.push({ id: uid(), site, code, enabled: true });
-  $("#js-code").value = "";
-  await save("JavaScript rule added");
-  setTimeout(checkJsStatus, 100);
-});
-
-$("#export-button").addEventListener("click", () => {
-  const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" });
+function exportConfig() {
+  const data = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), ...config }, null, 2);
+  const blob = new Blob([data], { type: "application/json" });
   const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `site-rule-runner-config-${new Date().toISOString().slice(0, 10)}.json`;
-  link.click();
+  const a = document.createElement("a"); a.href = url; a.download = "site-rule-runner-config.json"; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  showToast("Config exported");
-});
+}
 
-$("#import-button").addEventListener("click", () => $("#import-file").click());
-
-$("#import-file").addEventListener("change", async event => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-
+async function importConfig(event) {
+  const file = event.target.files?.[0]; if (!file) return;
   try {
-    const parsed = JSON.parse(await file.text());
-    config = cleanConfig(parsed);
-    await save("Config imported");
-    await chrome.runtime.sendMessage({ type: "SRR_SYNC_JS" }).catch(() => {});
-    checkJsStatus();
-  } catch (error) {
-    showToast(`Import failed: ${error.message}`);
-  } finally {
-    event.target.value = "";
-  }
-});
+    const raw = JSON.parse(await file.text());
+    config = SiteRuleUtils.normalizeConfig(raw);
+    await SiteRuleUtils.saveConfig(config);
+  } catch { alert("That file is not a valid Site Rule Runner config."); }
+  event.target.value = "";
+}
 
-load().catch(error => showToast(`Could not load: ${error.message}`));
+init();
