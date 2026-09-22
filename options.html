@@ -19,34 +19,34 @@
         <button class="nav" data-section="js">JavaScript Rules <span id="jsCount">0</span></button>
         <button class="nav" data-section="data">Import & Export</button>
       </nav>
-      <div class="sidebar-foot">Version 1.2.0</div>
+      <div class="sidebar-foot">Version 1.3.0</div>
     </aside>
 
     <main class="content">
       <section id="section-css" class="section">
         <div class="section-head">
-          <div><h1>CSS Hide Rules</h1><p>Hide elements on matching websites using a class name or any CSS selector.</p></div>
+          <div><h1>CSS Hide Rules</h1><p>Hide elements on matching websites using a class name or any CSS selector. Rules can have optional titles to make them easy to recognize.</p></div>
           <button id="newCss" class="btn primary">New CSS rule</button>
         </div>
-        <div class="toolbar"><input id="cssSearch" type="search" placeholder="Search websites or selectors"></div>
+        <div class="toolbar"><input id="cssSearch" type="search" placeholder="Search titles, websites, or selectors"></div>
         <div id="allCssRules" class="editor-list"></div>
       </section>
 
       <section id="section-js" class="section hidden">
         <div class="section-head">
-          <div><h1>JavaScript Rules</h1><p>Run custom JavaScript on matching page loads.</p></div>
+          <div><h1>JavaScript Rules</h1><p>Run custom JavaScript on matching page loads, or test edited code immediately on matching open tabs.</p></div>
           <button id="newJs" class="btn primary">New JavaScript rule</button>
         </div>
         <div id="jsRuntimeStatus" class="runtime-card"></div>
-        <div class="toolbar"><input id="jsSearch" type="search" placeholder="Search websites or JavaScript"></div>
+        <div class="toolbar"><input id="jsSearch" type="search" placeholder="Search titles, websites, or JavaScript"></div>
         <div id="allJsRules" class="editor-list"></div>
       </section>
 
       <section id="section-data" class="section hidden">
-        <div class="section-head"><div><h1>Import & Export</h1><p>Back up all CSS and JavaScript rules or move them to another browser.</p></div></div>
+        <div class="section-head"><div><h1>Import & Export</h1><p>Back up all CSS and JavaScript rules, including their titles, or move them to another browser.</p></div></div>
         <div class="data-grid">
-          <article class="panel"><h2>Export configuration</h2><p>Downloads one JSON file containing every rule and its enabled state.</p><button id="optionsExport" class="btn primary">Export config</button></article>
-          <article class="panel"><h2>Import configuration</h2><p>Importing replaces the rules currently stored in this extension.</p><button id="optionsImport" class="btn">Choose config file</button><input id="optionsFile" type="file" accept="application/json,.json" hidden></article>
+          <article class="panel"><h2>Export configuration</h2><p>Downloads one JSON file containing every rule, title, and enabled state.</p><button id="optionsExport" class="btn primary">Export config</button></article>
+          <article class="panel"><h2>Import configuration</h2><p>Importing replaces the rules currently stored in this extension. Older configs without titles still work.</p><button id="optionsImport" class="btn">Choose config file</button><input id="optionsFile" type="file" accept="application/json,.json" hidden></article>
           <article class="panel danger-zone"><h2>Delete all rules</h2><p>Clears all saved CSS and JavaScript rules from this browser.</p><button id="deleteAll" class="btn danger">Delete all rules</button></article>
         </div>
       </section>
@@ -57,9 +57,16 @@
     <form method="dialog" id="ruleForm" class="dialog-card">
       <div class="dialog-head"><div><h2 id="dialogTitle">Edit rule</h2><p id="dialogHelp"></p></div><button id="closeDialog" type="button" class="btn icon-btn" aria-label="Close">×</button></div>
       <input id="editType" type="hidden"><input id="editId" type="hidden">
+      <div><label for="editTitle">Title</label><input id="editTitle" maxlength="120" placeholder="Optional name for this rule"><div class="hint">For example: Hide sidebar ads, Blue chat messages, or Fix page controls.</div></div>
       <div><label for="editPattern">Website</label><input id="editPattern" required placeholder="example.com or *://*.example.com/*"><div class="hint">Examples: example.com, example.com/account/*, https://example.com/*, *://*.example.com/*, &lt;all_urls&gt;</div></div>
       <div id="selectorField"><label for="editSelector">CSS class or selector</label><input id="editSelector" placeholder="ad-banner or .sidebar .promo"><div class="hint">A simple class name is automatically converted to .class-name.</div></div>
       <div id="codeField"><label for="editCode">JavaScript</label><textarea id="editCode" rows="12" placeholder="// JavaScript to run on matching pages"></textarea></div>
+      <div id="liveField" class="live-field hidden">
+        <div class="live-head"><div><strong>Live editing</strong><span>Test the code currently in the editor without saving or reloading the page.</span></div><button id="runNow" type="button" class="btn">Run now</button></div>
+        <label class="enabled-row"><input id="editApplyNow" type="checkbox"> Apply the saved code immediately to matching open tabs</label>
+        <div id="liveStatus" class="live-status"></div>
+        <div class="hint">Running a new version does not automatically undo DOM changes, event listeners, timers, or other side effects left by an earlier run.</div>
+      </div>
       <label class="enabled-row"><input id="editEnabled" type="checkbox"> Enabled</label>
       <div class="dialog-actions"><button id="cancelDialog" type="button" class="btn">Cancel</button><button id="saveRule" type="submit" class="btn primary">Save rule</button></div>
     </form>

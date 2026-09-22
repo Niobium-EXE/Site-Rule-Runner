@@ -31,7 +31,7 @@
     if (!m) return null;
     let [, scheme, host, path] = m;
     scheme = scheme.toLowerCase();
-    if (!/^\*|http|https|file|ftp$/.test(scheme)) return null;
+    if (!/^(\*|http|https|file|ftp)$/.test(scheme)) return null;
     if (scheme === "file") return `file://${path}`;
     if (!host) return null;
     if (!path.startsWith("/")) path = `/${path}`;
@@ -87,9 +87,14 @@
     return selector;
   }
 
+  function normalizeTitle(rule = {}) {
+    return String(rule.title ?? rule.name ?? rule.label ?? "").trim();
+  }
+
   function normalizeCssRule(rule = {}) {
     return {
       id: String(rule.id || makeId("css")),
+      title: normalizeTitle(rule),
       pattern: String(rule.pattern ?? rule.website ?? rule.site ?? rule.url ?? "").trim(),
       selector: normalizeSelector(rule.selector ?? rule.cssClass ?? rule.className ?? rule.css ?? ""),
       enabled: rule.enabled !== false
@@ -99,6 +104,7 @@
   function normalizeJsRule(rule = {}) {
     return {
       id: String(rule.id || makeId("js")),
+      title: normalizeTitle(rule),
       pattern: String(rule.pattern ?? rule.website ?? rule.site ?? rule.url ?? "").trim(),
       code: String(rule.code ?? rule.javascript ?? rule.js ?? ""),
       enabled: rule.enabled !== false

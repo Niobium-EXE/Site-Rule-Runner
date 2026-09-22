@@ -34,7 +34,7 @@ async function refreshAllTabIcons() {
 }
 
 async function syncUserScripts() {
-  let status = { available: false, ok: false, message: "User Scripts API is unavailable." };
+  let status = { available: false, liveAvailable: false, ok: false, message: "User Scripts API is unavailable." };
   try {
     if (!chrome.userScripts?.getScripts) {
       await chrome.storage.local.set({ jsRuntimeStatus: status });
@@ -42,6 +42,7 @@ async function syncUserScripts() {
     }
 
     status.available = true;
+    status.liveAvailable = typeof chrome.userScripts.execute === "function";
     const existing = await chrome.userScripts.getScripts();
     const ours = existing.filter(s => s.id?.startsWith(SCRIPT_PREFIX)).map(s => s.id);
     if (ours.length) await chrome.userScripts.unregister({ ids: ours });
@@ -68,21 +69,80 @@ async function syncUserScripts() {
     }
 
     if (registrations.length) await chrome.userScripts.register(registrations);
+    const liveText = status.liveAvailable
+      ? " Live Run now/apply-on-save is available."
+      : " Live Run now requires Chromium 135+; saved rules will still run on future matching page loads.";
     status = {
       available: true,
+      liveAvailable: status.liveAvailable,
       ok: true,
-      message: skipped.length
+      message: (skipped.length
         ? `JavaScript rules registered. ${skipped.length} rule(s) had an invalid website pattern.`
-        : "JavaScript rules are registered and ready."
+        : "JavaScript rules are registered and ready.") + liveText
     };
   } catch (error) {
     status = {
       available: true,
+      liveAvailable: typeof chrome.userScripts?.execute === "function",
       ok: false,
       message: error?.message || "JavaScript rules could not be registered. Enable Allow User Scripts for this extension in your browser's extension details."
     };
   }
   await chrome.storage.local.set({ jsRuntimeStatus: status });
+}
+
+async function executeJavaScriptNow(pattern, code) {
+  if (!chrome.userScripts?.execute) {
+    return {
+      ok: false,
+      supported: false,
+      matched: 0,
+      ran: 0,
+      failed: 0,
+      message: "Live JavaScript execution requires Chromium 135 or newer and Allow User Scripts enabled."
+    };
+  }
+
+  if (!SiteRuleUtils.chromeMatchPattern(pattern) || !String(code || "").trim()) {
+    return { ok: false, supported: true, matched: 0, ran: 0, failed: 0, message: "The website pattern or JavaScript is invalid." };
+  }
+
+  const tabs = await chrome.tabs.query({});
+  const matchingTabs = tabs.filter(tab => tab.id && SiteRuleUtils.patternMatchesUrl(pattern, tab.url || ""));
+  if (!matchingTabs.length) {
+    return { ok: true, supported: true, matched: 0, ran: 0, failed: 0, message: "No currently open tabs match this rule." };
+  }
+
+  let ran = 0;
+  const failures = [];
+  for (const tab of matchingTabs) {
+    try {
+      const results = await chrome.userScripts.execute({
+        target: { tabId: tab.id },
+        js: [{ code }],
+        world: "MAIN",
+        injectImmediately: true
+      });
+      const executionError = results?.find(result => result?.error)?.error;
+      if (executionError) throw new Error(executionError);
+      ran += 1;
+    } catch (error) {
+      failures.push({ tabId: tab.id, title: tab.title || tab.url || `Tab ${tab.id}`, error: error?.message || String(error) });
+    }
+  }
+
+  const failed = failures.length;
+  return {
+    ok: failed === 0,
+    supported: true,
+    matched: matchingTabs.length,
+    ran,
+    failed,
+    failures,
+    message: failed
+      ? `Ran on ${ran} of ${matchingTabs.length} matching open tab(s); ${failed} failed.`
+      : `Ran immediately on ${ran} matching open tab(s).`
+  };
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -121,9 +181,20 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "srr-url-changed" && sender.tab?.id) {
     updateIconForTab(sender.tab.id, message.url);
+    return;
   }
+
   if (message?.type === "srr-sync-js") {
-    syncUserScripts().then(() => sendResponse({ ok: true })).catch(error => sendResponse({ ok: false, error: error?.message }));
+    syncUserScripts()
+      .then(() => sendResponse({ ok: true }))
+      .catch(error => sendResponse({ ok: false, error: error?.message }));
+    return true;
+  }
+
+  if (message?.type === "srr-run-js-now") {
+    executeJavaScriptNow(message.pattern, message.code)
+      .then(sendResponse)
+      .catch(error => sendResponse({ ok: false, supported: true, matched: 0, ran: 0, failed: 0, message: error?.message || String(error) }));
     return true;
   }
 });

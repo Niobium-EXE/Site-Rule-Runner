@@ -23,6 +23,7 @@
     </div>
 
     <section id="cssTab" class="tab-panel stack">
+      <div><label for="cssTitle">Title</label><input id="cssTitle" maxlength="120" placeholder="Optional rule name"></div>
       <div><label for="cssWebsite">Website</label><input id="cssWebsite" placeholder="example.com or *://*.example.com/*"></div>
       <div><label for="cssSelector">CSS class or selector</label><input id="cssSelector" placeholder="ad-banner or .sidebar .promo"></div>
       <button id="addCss" class="btn primary">Add hide rule</button>
@@ -30,6 +31,7 @@
     </section>
 
     <section id="jsTab" class="tab-panel stack hidden">
+      <div><label for="jsTitle">Title</label><input id="jsTitle" maxlength="120" placeholder="Optional rule name"></div>
       <div><label for="jsWebsite">Website</label><input id="jsWebsite" placeholder="example.com or *://*.example.com/*"></div>
       <div><label for="jsCode">JavaScript</label><textarea id="jsCode" placeholder="// Code to run on matching page loads"></textarea></div>
       <button id="addJs" class="btn primary">Add JavaScript rule</button>

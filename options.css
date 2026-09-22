@@ -52,3 +52,14 @@ dialog::backdrop { background:rgba(0,0,0,.6); }
   .content { padding:22px 16px; }
   .section-head { flex-direction:column; }
 }
+.editor-info { min-width:0; }
+.editor-title { font-size:15px; font-weight:800; line-height:1.25; overflow-wrap:anywhere; }
+.editor-title + .editor-site { margin-top:4px; }
+.live-field { border:1px solid var(--border); background:#11151b; border-radius:10px; padding:12px; display:grid; gap:10px; }
+.live-head { display:flex; justify-content:space-between; gap:14px; align-items:center; }
+.live-head strong, .live-head span { display:block; }
+.live-head strong { font-size:13px; }
+.live-head span { margin-top:3px; color:var(--muted); font-size:11px; line-height:1.35; }
+.live-status { min-height:16px; color:var(--muted); font-size:11px; line-height:1.4; }
+.live-status.good { color:#78d7a8; }
+.live-status.bad { color:#ff9898; }
